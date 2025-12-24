@@ -1,0 +1,432 @@
+{
+  "_schema": {
+    "name": "A-PRACTICAL.contract",
+    "version": "4.0.0",
+    "stage": "A.contract_only",
+    "maturity_stage": "pilot",
+    "static_frame_only": true,
+    "underpainting_intent": "structure_plus_masks",
+    "created_at": "2025-12-16T00:00:00+02:00",
+    "updated_at": "2025-12-24T22:00:00+02:00"
+  },
+
+  "module_id": "A-III-2",
+  "module_abbr": "NSS",
+  "module_type": "RULESET",
+  "module_name": {
+    "uk": "СИСТЕМА НЕГАТИВНОГО ПРОСТОРУ",
+    "en": "NEGATIVE SPACE SYSTEM"
+  },
+  "version": "1.1.0",
+
+  "description": "Модуль A-III-2 формалізує негативний простір як активний композиційний інструмент: коридори, острови/пустоти, домінуючий напрямок, ширину та зв'язність. NSS працює у координатах формату (A-III-0) та відштовхується від мас (A-III-1), створюючи геометричну основу для ритму/флоу, зон тиші, щільності та напруги.",
+
+  "io_contract": {
+    "inputs": [
+      {
+        "artifact_id": "masses_mask",
+        "type": "mask",
+        "scope": "public",
+        "description": "Маска позитивних мас (body/object/shadow) від A-III-1"
+      },
+      {
+        "artifact_id": "format_bounds",
+        "type": "bbox",
+        "scope": "public",
+        "description": "Межі формату від A-III-0"
+      }
+    ],
+    "outputs": [
+      {
+        "artifact_id": "nss_mask",
+        "type": "mask",
+        "scope": "public",
+        "description": "Бінарна маска негативного простору"
+      },
+      {
+        "artifact_id": "corridor_map",
+        "type": "mask",
+        "scope": "public",
+        "description": "Маска виявлених коридорів з класифікацією"
+      },
+      {
+        "artifact_id": "void_map",
+        "type": "mask",
+        "scope": "public",
+        "description": "Маска островів/пустот негативного простору"
+      },
+      {
+        "artifact_id": "nss_indices",
+        "type": "json",
+        "scope": "public",
+        "description": "Обчислені індекси NSS (ratio, fragmentation, asymmetry тощо)"
+      }
+    ]
+  },
+
+  "parameters": {
+    "nss_global_ratio": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.45,
+      "description": "Частка площі негативного простору від площі формату (цільове значення)."
+    },
+    "nss_connected_corridors": {
+      "type": "int",
+      "unit": "count",
+      "range": [0, 5],
+      "default": 1,
+      "description": "Кількість глобальних зв'язних коридорів, що проходять через кадр."
+    },
+    "corridor_primary_type": {
+      "type": "enum",
+      "enum": ["none", "VERTICAL", "HORIZONTAL", "DIAGONAL", "RADIAL"],
+      "default": "VERTICAL",
+      "unit": "category",
+      "description": "Домінуючий тип коридору негативного простору."
+    },
+    "corridor_primary_width": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.2,
+      "description": "Нормована ширина головного коридору (від ширини/висоти формату)."
+    },
+    "has_central_corridor": {
+      "type": "boolean",
+      "unit": "flag",
+      "default": false,
+      "description": "Чи проходить головний коридор через центральну область формату."
+    },
+    "has_island_space": {
+      "type": "boolean",
+      "unit": "flag",
+      "default": false,
+      "description": "Чи існують відокремлені «острови» негативного простору."
+    },
+    "central_void_ratio": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.1,
+      "description": "Частка центральної області, зайнята негативним простором."
+    },
+    "empty_third_index": {
+      "type": "int",
+      "unit": "index",
+      "range": [0, 3],
+      "default": 0,
+      "description": "0=немає вираженої пустої третини; 1–3=яка третина найбільш порожня."
+    },
+    "nss_asymmetry": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.4,
+      "description": "Міра асиметричного розподілу негативного простору (0=симетрично)."
+    },
+    "nss_fragmentation": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.3,
+      "description": "Ступінь фрагментації негативного простору (0=єдиний блок, 1=дрібна крихта)."
+    }
+  },
+
+  "parameter_groups": {
+    "global_metrics": ["nss_global_ratio", "nss_asymmetry", "nss_fragmentation"],
+    "corridor_config": ["nss_connected_corridors", "corridor_primary_type", "corridor_primary_width", "has_central_corridor"],
+    "void_config": ["has_island_space", "central_void_ratio", "empty_third_index"]
+  },
+
+  "constraints": [
+    {
+      "expr": "nss_global_ratio >= 0.2",
+      "error_code": "E001"
+    },
+    {
+      "expr": "nss_global_ratio <= 0.8",
+      "error_code": "E002"
+    },
+    {
+      "expr": "corridor_primary_type == 'none' => nss_connected_corridors == 0",
+      "error_code": "E003"
+    },
+    {
+      "expr": "has_central_corridor == true => corridor_primary_width >= 0.08",
+      "error_code": "E004"
+    },
+    {
+      "expr": "nss_connected_corridors >= 0 && nss_connected_corridors <= 5",
+      "error_code": "E005"
+    },
+    {
+      "expr": "corridor_primary_width >= 0.0 && corridor_primary_width <= 1.0",
+      "error_code": "E006"
+    }
+  ],
+
+  "validation": {
+    "rules": [
+      {
+        "name": "overfragmentation_check",
+        "condition": "nss_fragmentation > 0.8",
+        "severity": "warning",
+        "message": "Негативний простір надто фрагментований — коридори можуть втратити читабельність.",
+        "error_code": "W001"
+      },
+      {
+        "name": "empty_third_low_global",
+        "condition": "empty_third_index != 0 && nss_global_ratio < 0.3",
+        "severity": "warning",
+        "message": "Пуста третина при низькому nss_global_ratio може виглядати випадковою.",
+        "error_code": "W002"
+      },
+      {
+        "name": "no_corridor_warning",
+        "condition": "nss_connected_corridors == 0 && nss_global_ratio >= 0.3 && nss_global_ratio <= 0.7",
+        "severity": "warning",
+        "message": "Багато негативного простору без виразного коридору — перевір композиційний флоу.",
+        "error_code": "W003"
+      },
+      {
+        "name": "high_asymmetry_warning",
+        "condition": "nss_asymmetry > 0.8",
+        "severity": "warning",
+        "message": "Висока асиметрія негативного простору — перевір баланс композиції.",
+        "error_code": "W004"
+      }
+    ]
+  },
+
+  "error_codes": [
+    {
+      "code": "E001",
+      "level": "error",
+      "title": { "uk": "Замало негативного простору", "en": "Negative space too low" },
+      "message": { "uk": "nss_global_ratio має бути >= 0.2.", "en": "nss_global_ratio must be >= 0.2." }
+    },
+    {
+      "code": "E002",
+      "level": "error",
+      "title": { "uk": "Забагато негативного простору", "en": "Negative space too high" },
+      "message": { "uk": "nss_global_ratio має бути <= 0.8.", "en": "nss_global_ratio must be <= 0.8." }
+    },
+    {
+      "code": "E003",
+      "level": "error",
+      "title": { "uk": "Невідповідність: тип none і коридори", "en": "Mismatch: none type with corridors" },
+      "message": { "uk": "Якщо corridor_primary_type='none', тоді nss_connected_corridors має бути 0.", "en": "If corridor_primary_type is 'none', nss_connected_corridors must be 0." }
+    },
+    {
+      "code": "E004",
+      "level": "error",
+      "title": { "uk": "Надто вузький центральний коридор", "en": "Central corridor too narrow" },
+      "message": { "uk": "За has_central_corridor=true, corridor_primary_width має бути >= 0.08.", "en": "If has_central_corridor=true, corridor_primary_width must be >= 0.08." }
+    },
+    {
+      "code": "E005",
+      "level": "error",
+      "title": { "uk": "Кількість коридорів поза діапазоном", "en": "Corridor count out of range" },
+      "message": { "uk": "nss_connected_corridors має бути в межах [0, 5].", "en": "nss_connected_corridors must be within [0, 5]." }
+    },
+    {
+      "code": "E006",
+      "level": "error",
+      "title": { "uk": "Ширина коридору поза діапазоном", "en": "Corridor width out of range" },
+      "message": { "uk": "corridor_primary_width має бути в межах [0.0, 1.0].", "en": "corridor_primary_width must be within [0.0, 1.0]." }
+    },
+    {
+      "code": "W001",
+      "level": "warning",
+      "title": { "uk": "Надмірна фрагментація", "en": "Over-fragmentation" },
+      "message": { "uk": "nss_fragmentation > 0.8 — коридори можуть втратити читабельність.", "en": "nss_fragmentation > 0.8 — corridors may lose readability." }
+    },
+    {
+      "code": "W002",
+      "level": "warning",
+      "title": { "uk": "Пуста третина виглядає слабко", "en": "Weak empty-third signal" },
+      "message": { "uk": "empty_third_index != 0 при nss_global_ratio < 0.3 може виглядати випадково.", "en": "empty_third_index != 0 with nss_global_ratio < 0.3 may look accidental." }
+    },
+    {
+      "code": "W003",
+      "level": "warning",
+      "title": { "uk": "Немає коридорів при середньому NS", "en": "No corridors with mid NS" },
+      "message": { "uk": "nss_connected_corridors == 0 при nss_global_ratio 0.3..0.7 — перевір флоу.", "en": "nss_connected_corridors == 0 with nss_global_ratio 0.3..0.7 — check visual flow." }
+    },
+    {
+      "code": "W004",
+      "level": "warning",
+      "title": { "uk": "Висока асиметрія", "en": "High asymmetry" },
+      "message": { "uk": "nss_asymmetry > 0.8 — перевір баланс композиції.", "en": "nss_asymmetry > 0.8 — check composition balance." }
+    }
+  ],
+
+  "algorithm": {
+    "artifact_registry": [
+      { "artifact_id": "nss_mask", "scope": "public" },
+      { "artifact_id": "corridor_map", "scope": "public" },
+      { "artifact_id": "void_map", "scope": "public" },
+      { "artifact_id": "nss_indices", "scope": "public" },
+      { "artifact_id": "inverted_space_mask", "scope": "private" },
+      { "artifact_id": "negative_components", "scope": "private" },
+      { "artifact_id": "corridors_raw", "scope": "private" }
+    ],
+    "steps": [
+      {
+        "id": "S001",
+        "name": "ingest_masses",
+        "type": "load",
+        "uses": ["masses_mask", "format_bounds"],
+        "produces": ["inverted_space_mask"],
+        "description": "Отримати маски мас та інвертувати для негативного простору."
+      },
+      {
+        "id": "S002",
+        "name": "extract_connected_components",
+        "type": "transform",
+        "uses": ["inverted_space_mask"],
+        "produces": ["negative_components"],
+        "description": "Знайти зв'язні області негативного простору."
+      },
+      {
+        "id": "S003",
+        "name": "detect_corridors",
+        "type": "transform",
+        "uses": ["negative_components"],
+        "produces": ["corridors_raw"],
+        "description": "Виявити коридори як області, що проходять між ключовими зонами."
+      },
+      {
+        "id": "S004",
+        "name": "classify_primary_corridor",
+        "type": "classify",
+        "uses": ["corridors_raw", "corridor_primary_type"],
+        "produces": ["corridor_map"],
+        "description": "Класифікувати домінуючий тип коридору."
+      },
+      {
+        "id": "S005",
+        "name": "compute_voids",
+        "type": "transform",
+        "uses": ["negative_components", "has_island_space"],
+        "produces": ["void_map"],
+        "description": "Побудувати карти пустот/островів негативного простору."
+      },
+      {
+        "id": "S006",
+        "name": "compute_indices",
+        "type": "transform",
+        "uses": ["corridor_map", "void_map", "inverted_space_mask"],
+        "produces": ["nss_indices"],
+        "description": "Обчислити nss_global_ratio, nss_fragmentation, nss_asymmetry тощо."
+      },
+      {
+        "id": "S007",
+        "name": "validate_constraints",
+        "type": "validate",
+        "uses": ["nss_indices"],
+        "produces": ["validation_report"],
+        "description": "Перевірити всі constraints та validation rules."
+      },
+      {
+        "id": "S008",
+        "name": "export_masks",
+        "type": "export",
+        "uses": ["inverted_space_mask", "corridor_map", "void_map", "nss_indices"],
+        "produces": ["nss_mask"],
+        "description": "Експортувати NSS маски та індекси для downstream модулів."
+      }
+    ]
+  },
+
+  "relations": {
+    "depends_on": ["A-III-0", "A-III-1"],
+    "influences": ["A-IV-1", "A-V-1", "A-VI-1"],
+    "conflicts_with": []
+  },
+
+  "test_cases": [
+    {
+      "id": "TC_NSS_POS_01",
+      "type": "positive",
+      "name": "Valid open composition with central corridor",
+      "input": {
+        "nss_global_ratio": 0.5,
+        "nss_connected_corridors": 1,
+        "corridor_primary_type": "VERTICAL",
+        "corridor_primary_width": 0.2,
+        "has_central_corridor": true
+      },
+      "expected": { "pass": true }
+    },
+    {
+      "id": "TC_NSS_POS_02",
+      "type": "positive",
+      "name": "Valid composition without corridors",
+      "input": {
+        "nss_global_ratio": 0.25,
+        "nss_connected_corridors": 0,
+        "corridor_primary_type": "none",
+        "has_central_corridor": false
+      },
+      "expected": { "pass": true }
+    },
+    {
+      "id": "TC_NSS_NEG_01",
+      "type": "negative",
+      "name": "Too little negative space",
+      "input": {
+        "nss_global_ratio": 0.1
+      },
+      "expected": { "pass": false, "error_code": "E001" }
+    },
+    {
+      "id": "TC_NSS_NEG_02",
+      "type": "negative",
+      "name": "None corridor type but non-zero corridor count",
+      "input": {
+        "corridor_primary_type": "none",
+        "nss_connected_corridors": 2
+      },
+      "expected": { "pass": false, "error_code": "E003" }
+    },
+    {
+      "id": "TC_NSS_NEG_03",
+      "type": "negative",
+      "name": "Central corridor too narrow",
+      "input": {
+        "has_central_corridor": true,
+        "corridor_primary_width": 0.05
+      },
+      "expected": { "pass": false, "error_code": "E004" }
+    },
+    {
+      "id": "TC_NSS_WARN_01",
+      "type": "warning",
+      "name": "Over-fragmentation warning",
+      "input": {
+        "nss_global_ratio": 0.5,
+        "nss_fragmentation": 0.9,
+        "nss_connected_corridors": 1,
+        "corridor_primary_type": "VERTICAL"
+      },
+      "expected": { "pass": true, "warning_code": "W001" }
+    }
+  ],
+
+  "policies": {
+    "unit_policy": "strict",
+    "constraints_dsl": {
+      "dsl_version": "1.0",
+      "syntax": "string_expr"
+    },
+    "glossary_policy": "strict",
+    "i18n_policy": {
+      "default_lang": "uk",
+      "supported_langs": ["uk", "en"]
+    }
+  }
+}
