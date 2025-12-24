@@ -1,0 +1,330 @@
+{
+  "_schema": {
+    "name": "A-PRACTICAL.contract",
+    "version": "4.0.0",
+    "stage": "A.contract_only",
+    "maturity_stage": "pilot",
+    "static_frame_only": true,
+    "underpainting_intent": "structure_only",
+    "created_at": "2025-12-16T00:00:00+02:00",
+    "updated_at": "2025-12-24T22:00:00+02:00"
+  },
+
+  "module_id": "A-I-3",
+  "module_abbr": "SPS",
+  "module_type": "BRIDGE",
+  "module_name": {
+    "uk": "СИСТЕМА ПЛАНІВ ТА КАДРУВАННЯ",
+    "en": "SHOT / PLAN SYSTEM"
+  },
+  "version": "1.1.0",
+
+  "description": "Модуль A-I-3 визначає канонічну систему планів і кадрування (ECU–ELS), що використовується для структурної організації сцени без перспективної деформації. Система слугує мостом між просторовими правилами та композиційними модулями, забезпечуючи узгоджений словник планів для всієї системи.",
+
+  "io_contract": {
+    "inputs": [
+      {
+        "artifact_id": "scene_context",
+        "type": "json",
+        "scope": "public",
+        "description": "Контекст сцени з базовими просторовими параметрами"
+      },
+      {
+        "artifact_id": "figure_bounds",
+        "type": "bbox",
+        "scope": "public",
+        "description": "Bounding box основної фігури/об'єкта"
+      }
+    ],
+    "outputs": [
+      {
+        "artifact_id": "shot_layout",
+        "type": "json",
+        "scope": "public",
+        "description": "Визначений тип плану та параметри кадрування"
+      },
+      {
+        "artifact_id": "framing_guide",
+        "type": "mask",
+        "scope": "public",
+        "description": "Візуальний гайд кадрування з safety margins"
+      }
+    ]
+  },
+
+  "parameters": {
+    "shot_type": {
+      "type": "enum",
+      "enum": ["ECU", "CU", "MCU", "MS", "MLS", "LS", "ELS"],
+      "default": "MS",
+      "unit": "category",
+      "description": "Тип плану згідно канонічної шкали Shot / Plan System (ECU..ELS)."
+    },
+    "framing_tightness": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 1.0],
+      "default": 0.5,
+      "description": "Ступінь щільності кадрування відносно фігури (0=вільно, 1=максимально щільно)."
+    },
+    "crop_safety_margin": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 0.3],
+      "default": 0.1,
+      "description": "Безпечний відступ від країв формату для уникнення обрізання важливих елементів."
+    },
+    "headroom_ratio": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [0.0, 0.5],
+      "default": 0.15,
+      "description": "Співвідношення простору над головою фігури до висоти кадру."
+    },
+    "lookroom_bias": {
+      "type": "float",
+      "unit": "fraction",
+      "range": [-1.0, 1.0],
+      "default": 0.0,
+      "description": "Зміщення простору у напрямку погляду фігури (-1=ліворуч, +1=праворуч)."
+    }
+  },
+
+  "parameter_groups": {
+    "shot_definition": ["shot_type"],
+    "framing_control": ["framing_tightness", "crop_safety_margin"],
+    "composition_aids": ["headroom_ratio", "lookroom_bias"]
+  },
+
+  "constraints": [
+    {
+      "expr": "shot_type == 'ECU' => framing_tightness >= 0.85",
+      "error_code": "E001"
+    },
+    {
+      "expr": "shot_type == 'ELS' => framing_tightness <= 0.3",
+      "error_code": "E002"
+    },
+    {
+      "expr": "shot_type == 'CU' => framing_tightness >= 0.7",
+      "error_code": "E003"
+    },
+    {
+      "expr": "crop_safety_margin >= 0.0 && crop_safety_margin <= 0.3",
+      "error_code": "E004"
+    },
+    {
+      "expr": "headroom_ratio >= 0.0 && headroom_ratio <= 0.5",
+      "error_code": "E005"
+    }
+  ],
+
+  "validation": {
+    "rules": [
+      {
+        "name": "loose_cu_warning",
+        "condition": "shot_type == 'CU' && framing_tightness < 0.75",
+        "severity": "warning",
+        "message": "CU з framing_tightness < 0.75 може виглядати як MCU — перевір намір.",
+        "error_code": "W001"
+      },
+      {
+        "name": "tight_ls_warning",
+        "condition": "shot_type == 'LS' && framing_tightness > 0.5",
+        "severity": "warning",
+        "message": "LS з framing_tightness > 0.5 може не залишити достатньо простору для контексту.",
+        "error_code": "W002"
+      },
+      {
+        "name": "extreme_lookroom_warning",
+        "condition": "abs(lookroom_bias) > 0.7",
+        "severity": "warning",
+        "message": "Екстремальний lookroom_bias може порушити баланс композиції.",
+        "error_code": "W003"
+      }
+    ]
+  },
+
+  "error_codes": [
+    {
+      "code": "E001",
+      "level": "error",
+      "title": { "uk": "Недостатньо щільне ECU-кадрування", "en": "ECU framing too loose" },
+      "message": { "uk": "Для ECU framing_tightness має бути >= 0.85.", "en": "For ECU shots framing_tightness must be >= 0.85." }
+    },
+    {
+      "code": "E002",
+      "level": "error",
+      "title": { "uk": "Занадто щільне ELS-кадрування", "en": "ELS framing too tight" },
+      "message": { "uk": "Для ELS framing_tightness має бути <= 0.3.", "en": "For ELS shots framing_tightness must be <= 0.3." }
+    },
+    {
+      "code": "E003",
+      "level": "error",
+      "title": { "uk": "Недостатньо щільне CU-кадрування", "en": "CU framing too loose" },
+      "message": { "uk": "Для CU framing_tightness має бути >= 0.7.", "en": "For CU shots framing_tightness must be >= 0.7." }
+    },
+    {
+      "code": "E004",
+      "level": "error",
+      "title": { "uk": "Safety margin поза діапазоном", "en": "Safety margin out of range" },
+      "message": { "uk": "crop_safety_margin має бути в межах [0.0, 0.3].", "en": "crop_safety_margin must be within [0.0, 0.3]." }
+    },
+    {
+      "code": "E005",
+      "level": "error",
+      "title": { "uk": "Headroom поза діапазоном", "en": "Headroom out of range" },
+      "message": { "uk": "headroom_ratio має бути в межах [0.0, 0.5].", "en": "headroom_ratio must be within [0.0, 0.5]." }
+    },
+    {
+      "code": "W001",
+      "level": "warning",
+      "title": { "uk": "CU може виглядати як MCU", "en": "CU may appear as MCU" },
+      "message": { "uk": "CU з низьким framing_tightness може сприйматися як MCU.", "en": "CU with low framing_tightness may be perceived as MCU." }
+    },
+    {
+      "code": "W002",
+      "level": "warning",
+      "title": { "uk": "LS може бути занадто щільним", "en": "LS may be too tight" },
+      "message": { "uk": "LS з високим framing_tightness може не показати достатньо контексту.", "en": "LS with high framing_tightness may not show enough context." }
+    },
+    {
+      "code": "W003",
+      "level": "warning",
+      "title": { "uk": "Екстремальний lookroom", "en": "Extreme lookroom" },
+      "message": { "uk": "Екстремальний lookroom_bias може порушити візуальний баланс.", "en": "Extreme lookroom_bias may disrupt visual balance." }
+    }
+  ],
+
+  "algorithm": {
+    "artifact_registry": [
+      { "artifact_id": "shot_layout", "scope": "public" },
+      { "artifact_id": "framing_guide", "scope": "public" },
+      { "artifact_id": "shot_metrics", "scope": "private" }
+    ],
+    "steps": [
+      {
+        "id": "S001",
+        "name": "load_context",
+        "type": "load",
+        "uses": ["scene_context", "figure_bounds"],
+        "produces": ["context_data"],
+        "description": "Завантажити контекст сцени та bounds фігури для аналізу."
+      },
+      {
+        "id": "S002",
+        "name": "determine_shot_type",
+        "type": "classify",
+        "uses": ["context_data", "shot_type"],
+        "produces": ["classified_shot"],
+        "description": "Класифікувати та валідувати обраний тип плану відносно контексту."
+      },
+      {
+        "id": "S003",
+        "name": "compute_framing",
+        "type": "transform",
+        "uses": ["classified_shot", "framing_tightness", "crop_safety_margin"],
+        "produces": ["framing_params"],
+        "description": "Обчислити параметри кадрування з урахуванням safety margins."
+      },
+      {
+        "id": "S004",
+        "name": "apply_composition_aids",
+        "type": "transform",
+        "uses": ["framing_params", "headroom_ratio", "lookroom_bias"],
+        "produces": ["shot_metrics"],
+        "description": "Застосувати композиційні поправки (headroom, lookroom)."
+      },
+      {
+        "id": "S005",
+        "name": "validate_constraints",
+        "type": "validate",
+        "uses": ["shot_metrics"],
+        "produces": ["validation_report"],
+        "description": "Перевірити всі constraints та validation rules."
+      },
+      {
+        "id": "S006",
+        "name": "export_layout",
+        "type": "export",
+        "uses": ["shot_metrics", "validation_report"],
+        "produces": ["shot_layout", "framing_guide"],
+        "description": "Експортувати shot_layout JSON та візуальний framing_guide."
+      }
+    ]
+  },
+
+  "relations": {
+    "depends_on": ["A-I-1", "A-I-2"],
+    "influences": ["A-II-1", "A-III-1", "A-III-2"],
+    "conflicts_with": []
+  },
+
+  "test_cases": [
+    {
+      "id": "TC_SPS_POS_01",
+      "type": "positive",
+      "name": "Valid MS default framing",
+      "input": {
+        "shot_type": "MS",
+        "framing_tightness": 0.5,
+        "crop_safety_margin": 0.1
+      },
+      "expected": { "pass": true }
+    },
+    {
+      "id": "TC_SPS_POS_02",
+      "type": "positive",
+      "name": "Valid ECU tight framing",
+      "input": {
+        "shot_type": "ECU",
+        "framing_tightness": 0.9,
+        "crop_safety_margin": 0.05
+      },
+      "expected": { "pass": true }
+    },
+    {
+      "id": "TC_SPS_NEG_01",
+      "type": "negative",
+      "name": "ECU with loose framing fails",
+      "input": {
+        "shot_type": "ECU",
+        "framing_tightness": 0.4
+      },
+      "expected": { "pass": false, "error_code": "E001" }
+    },
+    {
+      "id": "TC_SPS_NEG_02",
+      "type": "negative",
+      "name": "ELS with tight framing fails",
+      "input": {
+        "shot_type": "ELS",
+        "framing_tightness": 0.6
+      },
+      "expected": { "pass": false, "error_code": "E002" }
+    },
+    {
+      "id": "TC_SPS_WARN_01",
+      "type": "warning",
+      "name": "CU with borderline framing triggers warning",
+      "input": {
+        "shot_type": "CU",
+        "framing_tightness": 0.72
+      },
+      "expected": { "pass": true, "warning_code": "W001" }
+    }
+  ],
+
+  "policies": {
+    "unit_policy": "strict",
+    "constraints_dsl": {
+      "dsl_version": "1.0",
+      "syntax": "string_expr"
+    },
+    "glossary_policy": "strict",
+    "i18n_policy": {
+      "default_lang": "uk",
+      "supported_langs": ["uk", "en"]
+    }
+  }
+}
