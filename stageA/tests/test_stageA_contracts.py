@@ -101,11 +101,15 @@ class TestStageAContractsValidation(unittest.TestCase):
         cls.repo_root = _repo_root()
         cls.stageA_dir = cls.repo_root / "stageA"
         
-        # Import validator
-        lint_dir = cls.stageA_dir / "lint"
-        sys.path.insert(0, str(lint_dir))
-        
-        from contract_lint_validator import ContractLintValidator
+        # Import validator (clean import via package)
+        try:
+            from stageA.lint import ContractLintValidator
+        except ImportError:
+            # Fallback for direct execution
+            repo_root = _repo_root()
+            if str(repo_root) not in sys.path:
+                sys.path.insert(0, str(repo_root))
+            from stageA.lint import ContractLintValidator
         
         schema_path = cls.stageA_dir / "schema" / "contract_schema_stageA_v4.json"
         glossary_path = cls.stageA_dir / "glossary" / "glossary_v1.json"
